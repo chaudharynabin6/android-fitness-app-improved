@@ -26,7 +26,6 @@ class RunFragment : Fragment(R.layout.fragment_run) {
         binding.apply {
             fab.setOnClickListener {
                 val action = RunFragmentDirections.actionRunFragmentToTrackingFragment()
-                Timber.e("fab clicked")
                 findNavController().navigate(
                     action
                 )

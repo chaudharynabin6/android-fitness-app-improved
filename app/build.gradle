@@ -114,4 +114,7 @@ dependencies {
 
 //    fragment
     implementation "androidx.fragment:fragment-ktx:1.5.0"
+
+//    lifecycle service
+    implementation "androidx.lifecycle:lifecycle-service:2.5.0"
 }
