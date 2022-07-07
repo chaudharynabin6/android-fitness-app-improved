@@ -7,30 +7,27 @@ import android.view.ViewGroup
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import com.androiddevs.runningappyt.R
-import com.androiddevs.runningappyt.databinding.FragmentRunBinding
-import timber.log.Timber
+import com.androiddevs.runningappyt.databinding.FragmentSetupBinding
 
-class RunFragment : Fragment(R.layout.fragment_run) {
-    private lateinit var binding: FragmentRunBinding
+class SetupFragment : Fragment(R.layout.fragment_setup) {
+    private lateinit var binding: FragmentSetupBinding
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
-        binding = FragmentRunBinding.inflate(inflater, container, false)
+        binding = FragmentSetupBinding.inflate(inflater,container,false)
         return binding.root
     }
-
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         binding.apply {
-            fab.setOnClickListener {
-                val action = RunFragmentDirections.actionRunFragmentToTrackingFragment()
-                Timber.e("fab clicked")
-                findNavController().navigate(
-                    action
-                )
+            tvContinue.setOnClickListener {
+                val action = SetupFragmentDirections.actionSetupFragmentToRunFragment()
+                findNavController().navigate(action)
             }
         }
     }
+
 }
