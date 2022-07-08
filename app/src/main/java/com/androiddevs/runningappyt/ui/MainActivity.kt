@@ -1,24 +1,35 @@
 package com.androiddevs.runningappyt.ui
 
 import android.Manifest
+import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.util.AttributeSet
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.navigation.NavController
 import androidx.navigation.Navigation
 import androidx.navigation.ui.setupWithNavController
 import com.androiddevs.runningappyt.R
 import com.androiddevs.runningappyt.databinding.ActivityMainBinding
 import com.androiddevs.runningappyt.permission.location.Constants
 import com.androiddevs.runningappyt.permission.location.LocationPermission
+import com.androiddevs.runningappyt.ui.fragments.TrackingFragmentDirections
 import dagger.hilt.android.AndroidEntryPoint
 import pub.devrel.easypermissions.AppSettingsDialog
 import pub.devrel.easypermissions.EasyPermissions
 
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity(), EasyPermissions.PermissionCallbacks {
+    companion object {
+        const val action_show_tracking_fragment = "action_show_tracking_fragment"
+
+    }
 
     private lateinit var binding: ActivityMainBinding
+
+    private lateinit var navController: NavController
     override fun onCreate(savedInstanceState: Bundle?) {
 
         super.onCreate(savedInstanceState)
@@ -32,7 +43,7 @@ class MainActivity : AppCompatActivity(), EasyPermissions.PermissionCallbacks {
         binding.apply {
 
             setSupportActionBar(toolbar)
-            val navController =
+            navController =
                 Navigation.findNavController(this@MainActivity, R.id.navHostFragment)
             bottomNavigationView.setupWithNavController(navController = navController)
 
@@ -45,16 +56,35 @@ class MainActivity : AppCompatActivity(), EasyPermissions.PermissionCallbacks {
                     }
                 }
         }
-        sendEvent(MainActivityEvents.RequestLocationPermission)
+
+// on start events
+        sendEvent(events = MainActivityEvents.NavigateToTrackingFragmentIfNecessary(intent = intent))
     }
 
-    private fun sendEvent(events: MainActivityEvents){
-        when(events){
-            MainActivityEvents.RequestLocationPermission -> {
+    override fun onCreateView(
+        parent: View?,
+        name: String,
+        context: Context,
+        attrs: AttributeSet
+    ): View? {
+
+//      starting events to show
+        sendEvent(MainActivityEvents.RequestLocationPermission)
+        return super.onCreateView(parent, name, context, attrs)
+    }
+
+    private fun sendEvent(events: MainActivityEvents) {
+        when (events) {
+            is MainActivityEvents.RequestLocationPermission -> {
                 requestPermission()
             }
+            is MainActivityEvents.NavigateToTrackingFragmentIfNecessary -> {
+                navigateToTrackingFragmentIfNeeded(intent = events.intent)
+            }
+
         }
     }
+
     private fun requestPermission() {
         if (LocationPermission.hasLocationPermission(this)) {
             return
@@ -101,9 +131,27 @@ class MainActivity : AppCompatActivity(), EasyPermissions.PermissionCallbacks {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         EasyPermissions.onRequestPermissionsResult(requestCode, permissions, grantResults, this)
     }
+
+    private fun navigateToTrackingFragmentIfNeeded(intent: Intent?) {
+
+        intent?.let {
+            if (
+                it.action == action_show_tracking_fragment
+            ) {
+                val action = TrackingFragmentDirections.actionGlobalTrackingFragment()
+                navController.navigate(action)
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        navigateToTrackingFragmentIfNeeded(intent)
+    }
 }
 
 
 internal sealed class MainActivityEvents(){
     object RequestLocationPermission : MainActivityEvents()
+    data class NavigateToTrackingFragmentIfNecessary(val intent: Intent?) : MainActivityEvents()
 }
