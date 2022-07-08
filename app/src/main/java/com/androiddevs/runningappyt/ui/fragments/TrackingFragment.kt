@@ -1,7 +1,6 @@
 package com.androiddevs.runningappyt.ui.fragments
 
 import android.content.Intent
-import android.graphics.Color
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -11,11 +10,10 @@ import androidx.lifecycle.MutableLiveData
 import com.androiddevs.runningappyt.R
 import com.androiddevs.runningappyt.databinding.FragmentTrackingBinding
 import com.androiddevs.runningappyt.observers.MapViewObserver
+import com.androiddevs.runningappyt.other.utils.time_formatter.TimeFormatterUtil
 import com.androiddevs.runningappyt.services.PolyLineList
 import com.androiddevs.runningappyt.services.TrackingService
 import com.androiddevs.runningappyt.services.TrackingServiceStates
-import com.google.android.gms.maps.CameraUpdateFactory
-import com.google.android.gms.maps.model.PolylineOptions
 
 class TrackingFragment : Fragment(R.layout.fragment_tracking) {
 
@@ -68,6 +66,7 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
 //        events
         sendEvent(EventsTrackingFragment.SubscribeObserverOfTrackingFragment)
         sendEvent(EventsTrackingFragment.WhenReturnBackTo)
+        sendEvent(EventsTrackingFragment.ObserveTimer)
 
         super.onViewCreated(view, savedInstanceState)
     }
@@ -83,13 +82,20 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
             is EventsTrackingFragment.CopyToInternalStateFromTrackingService -> {
                 state = state.copy(
                     isTracking = event.state.isTracking,
-                    pathPoints = event.state.pathPoints
-                )
+                    pathPoints = event.state.pathPoints,
+
+                    )
                 updateTracking()
+
             }
             is EventsTrackingFragment.SubscribeObserverOfTrackingFragment -> {
                 subscribeToObservers()
             }
+
+            is EventsTrackingFragment.ObserveTimer -> {
+                observeTimer()
+            }
+
 
         }
         trackingFragmentState.postValue(state)
@@ -106,7 +112,7 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
 
 
     private fun subscribeToObservers() {
-        TrackingService.state.observe(viewLifecycleOwner) {
+        TrackingService.trackingState.observe(viewLifecycleOwner) {
             it?.let {
                 val state = it.toTrackingFragmentState()
                 sendEvent(EventsTrackingFragment.CopyToInternalStateFromTrackingService(state))
@@ -141,12 +147,26 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
         }
     }
 
+    private fun observeTimer() {
+        binding.apply {
+            TrackingService.timeRunInMillis.observe(viewLifecycleOwner) {
+                it?.let {
+                    val formattedTime = TimeFormatterUtil.getFormattedStopWatchTime(
+                        ms = it,
+                        isMillisIncluded = true
+                    )
+                    tvTimer.text = formattedTime
+                }
+
+            }
+        }
+    }
 }
 
 // internal state
 data class TrackingFragmentState(
     val isTracking: Boolean = false,
-    val pathPoints: PolyLineList = mutableListOf(mutableListOf())
+    val pathPoints: PolyLineList = mutableListOf(mutableListOf()),
 )
 
 // mapper
@@ -154,7 +174,7 @@ private fun TrackingServiceStates.toTrackingFragmentState(): TrackingFragmentSta
 
     return TrackingFragmentState(
         isTracking = isTracking,
-        pathPoints = pathPoints
+        pathPoints = pathPoints,
     )
 }
 
@@ -166,4 +186,5 @@ sealed class EventsTrackingFragment {
 
     object SubscribeObserverOfTrackingFragment : EventsTrackingFragment()
     object WhenReturnBackTo : EventsTrackingFragment()
+    object ObserveTimer : EventsTrackingFragment()
 }

@@ -16,6 +16,10 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.maps.model.LatLng
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 
@@ -30,8 +34,10 @@ class TrackingService : LifecycleService() {
 
     private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
 
+
     companion object {
-        val state = MutableLiveData<TrackingServiceStates>()
+        val trackingState = MutableLiveData<TrackingServiceStates>()
+        val trackingTimerState = MutableLiveData<TrackingServiceTimerState>()
 
         //        actions
         const val action_start_or_resume_service = "action_start_or_resume_service"
@@ -42,10 +48,17 @@ class TrackingService : LifecycleService() {
         const val location_update_interval = 5000L
         const val location_fastest_interval = 2000L
 
+        //        timer
+        const val timer_update_interval = 100L
+
+        var timeRunInMillis = MutableLiveData<Long>(0L)
+        var timeRunInSeconds = MutableLiveData<Long>(0L)
 
     }
 
-    private var trackingStates = TrackingServiceStates()
+    private var state = TrackingServiceStates()
+    private var timerState = TrackingServiceTimerState()
+
 
     override fun onCreate() {
         super.onCreate()
@@ -82,51 +95,68 @@ class TrackingService : LifecycleService() {
             is EventsTrackingService.PostInitialValues -> {
 
 //                posting new value
-               trackingStates = trackingStates.copy(
-                   isFirsRun = true,
-                   isTracking = false,
-                   pathPoints = mutableListOf(mutableListOf())
-               )
+                state = state.copy(
+                    isFirsRun = true,
+                    isTracking = false,
+                    pathPoints = mutableListOf(mutableListOf()),
+
+                    )
+                timerState = timerState.copy(
+                    isTimerEnable = false,
+                )
+
             }
             is EventsTrackingService.StartTrackingService -> {
 
                 startForegroundService()
 
                 //  posting new value
-                trackingStates = trackingStates.copy(
-                    isFirsRun = false
+                state = state.copy(
+                    isFirsRun = false,
+
+                    )
+                timerState = timerState.copy(
+                    isTimerEnable = true
                 )
 
             }
             is EventsTrackingService.PauseTrackingService -> {
-                trackingStates = trackingStates.copy(
-                    isTracking = false
+                state = state.copy(
+                    isTracking = false,
+                )
+                timerState = timerState.copy(
+                    isTimerEnable = false
                 )
             }
             is EventsTrackingService.AddPathPoints -> {
-                trackingStates = trackingStates.copy(
+                state = state.copy(
                     pathPoints = event.pathPoints
                 )
             }
-            is EventsTrackingService.EnableLocationTracking -> {
-                trackingStates = trackingStates.copy(
-                    isTracking = true
+            is EventsTrackingService.EnableLocationTrackingAndTimer -> {
+                state = state.copy(
+                    isTracking = true,
+                )
+                timerState = timerState.copy(
+                    isTimerEnable = true
                 )
                 updateLocationTracking()
+                startTimer()
             }
             is EventsTrackingService.AddEmptyPolyLine -> {
-                trackingStates = trackingStates.copy(
+                state = state.copy(
                     pathPoints = event.pathPoints
                 )
             }
         }
 
-        state.postValue(trackingStates)
+        trackingState.postValue(state)
     }
 
 
+
     private fun startForegroundService() {
-        if (trackingStates.isFirsRun) {
+        if (state.isFirsRun) {
 
             val notificationManager = getSystemService(
                 Context.NOTIFICATION_SERVICE
@@ -146,11 +176,11 @@ class TrackingService : LifecycleService() {
 //            resume service
             addEmptyPolyline()
         }
-        sendEvent(EventsTrackingService.EnableLocationTracking)
+        sendEvent(EventsTrackingService.EnableLocationTrackingAndTimer)
     }
 
     private fun updateLocationTracking() {
-        if (trackingStates.isTracking) {
+        if (state.isTracking) {
             if (LocationPermission.hasLocationPermission(this)) {
                 val request = LocationRequest().apply {
                     interval = location_update_interval
@@ -172,7 +202,7 @@ class TrackingService : LifecycleService() {
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(p0: LocationResult) {
             super.onLocationResult(p0)
-            if (trackingStates.isTracking) {
+            if (state.isTracking) {
                 p0.locations.let { locations ->
                     for (location in locations) {
                         addPathPoint(location)
@@ -187,7 +217,7 @@ class TrackingService : LifecycleService() {
     fun addPathPoint(location: Location) {
         location.let {
             val position = LatLng(location.latitude, location.longitude)
-            trackingStates.pathPoints.let { polyLineList ->
+            state.pathPoints.let { polyLineList ->
 
                 val polyline: Polyline = polyLineList.last()
 //               inserting co-ordinate
@@ -199,7 +229,7 @@ class TrackingService : LifecycleService() {
     }
 
     private fun addEmptyPolyline() {
-        trackingStates.pathPoints.apply {
+        state.pathPoints.apply {
 //        inside polylineList adding another list of polyline co-ordinates
             val polyLineList: PolyLineList = this
 
@@ -212,20 +242,58 @@ class TrackingService : LifecycleService() {
         }
     }
 
+
+    private var lapTime = 0L
+    private var timeRun = 0L
+    private var timeStarted = 0L
+    private var lastSecondTimeStamp = 0L
+    private fun startTimer() {
+        timeStarted = System.currentTimeMillis()
+        CoroutineScope(Dispatchers.Main).launch {
+            while (state.isTracking) {
+//              time difference between the each start time and system time
+                lapTime = System.currentTimeMillis() - timeStarted
+
+//                 post the new lapTime
+//                total run is
+
+                timeRunInMillis.postValue(timeRun + lapTime)
+
+                trackingTimerState.postValue(timerState)
+                if (timeRunInMillis.value!! >= lastSecondTimeStamp + 1000L) {
+
+                    timeRunInSeconds.postValue(timeRunInSeconds.value!! + 1)
+                    lastSecondTimeStamp += 1000L
+
+                }
+                delay(timer_update_interval)
+            }
+//             updating total time only when
+            timeRun += lapTime
+
+        }
+
+    }
+
 }
 
 
 data class TrackingServiceStates(
     val isFirsRun: Boolean = true,
     val isTracking: Boolean = false,
-    val pathPoints: PolyLineList = mutableListOf(mutableListOf())
+    val pathPoints: PolyLineList = mutableListOf(mutableListOf()),
 )
+
+data class TrackingServiceTimerState(
+    val isTimerEnable: Boolean = true
+)
+
 
 sealed class EventsTrackingService {
     object StartTrackingService : EventsTrackingService()
     object PauseTrackingService : EventsTrackingService()
     object PostInitialValues : EventsTrackingService()
-    object EnableLocationTracking : EventsTrackingService()
+    object EnableLocationTrackingAndTimer : EventsTrackingService()
     data class AddPathPoints(val pathPoints: PolyLineList) : EventsTrackingService()
     data class AddEmptyPolyLine(val pathPoints: PolyLineList) : EventsTrackingService()
 }
