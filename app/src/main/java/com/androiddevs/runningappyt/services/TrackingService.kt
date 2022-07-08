@@ -65,6 +65,7 @@ class TrackingService : LifecycleService() {
                 }
                 action_pause_service -> {
                     Timber.e("service  paused")
+                    sendEvent(event = EventsTrackingService.PauseTrackingService)
                 }
                 action_stop_service -> {
                     Timber.e("service stopped")
@@ -97,6 +98,11 @@ class TrackingService : LifecycleService() {
                 )
 
             }
+            is EventsTrackingService.PauseTrackingService -> {
+                trackingStates = trackingStates.copy(
+                    isTracking = false
+                )
+            }
             is EventsTrackingService.AddPathPoints -> {
                 trackingStates = trackingStates.copy(
                     pathPoints = event.pathPoints
@@ -117,6 +123,7 @@ class TrackingService : LifecycleService() {
 
         state.postValue(trackingStates)
     }
+
 
     private fun startForegroundService() {
         if (trackingStates.isFirsRun) {
@@ -169,7 +176,7 @@ class TrackingService : LifecycleService() {
                 p0.locations.let { locations ->
                     for (location in locations) {
                         addPathPoint(location)
-                        Timber.e("NEW LOCATION ${location.toString()} ")
+                        Timber.d("NEW LOCATION ${location.latitude} , ${location.longitude} ")
                     }
                 }
             }
@@ -216,6 +223,7 @@ data class TrackingServiceStates(
 
 sealed class EventsTrackingService {
     object StartTrackingService : EventsTrackingService()
+    object PauseTrackingService : EventsTrackingService()
     object PostInitialValues : EventsTrackingService()
     object EnableLocationTracking : EventsTrackingService()
     data class AddPathPoints(val pathPoints: PolyLineList) : EventsTrackingService()
