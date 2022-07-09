@@ -1,14 +1,18 @@
 package com.androiddevs.runningappyt.services
 
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.location.Location
 import android.os.Build
 import android.os.Looper
+import androidx.core.app.NotificationCompat
 import androidx.lifecycle.LifecycleService
 import androidx.lifecycle.MutableLiveData
+import com.androiddevs.runningappyt.R
 import com.androiddevs.runningappyt.notification.TrackingNotification
+import com.androiddevs.runningappyt.other.utils.time_formatter.TimeFormatterUtil
 import com.androiddevs.runningappyt.permission.location.LocationPermission
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -34,6 +38,9 @@ class TrackingService : LifecycleService() {
 
     private lateinit var fusedLocationProviderClient: FusedLocationProviderClient
 
+    private lateinit var currentNotificationBuilder: NotificationCompat.Builder
+
+    private lateinit var  notificationManager : NotificationManager
 
     companion object {
         val trackingState = MutableLiveData<TrackingServiceStates>()
@@ -63,8 +70,14 @@ class TrackingService : LifecycleService() {
     override fun onCreate() {
         super.onCreate()
         fusedLocationProviderClient = FusedLocationProviderClient(this)
+        currentNotificationBuilder = trackingNotification.getNotificationBuilder()
+        notificationManager = getSystemService(
+            Context.NOTIFICATION_SERVICE
+        ) as NotificationManager
 //        events
         sendEvent(event = EventsTrackingService.PostInitialValues)
+        sendEvent(event = EventsTrackingService.ObserveTrackingAndUpdateActionState)
+        sendEvent(event = EventsTrackingService.ObserveTrackingTime)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -148,20 +161,44 @@ class TrackingService : LifecycleService() {
                     pathPoints = event.pathPoints
                 )
             }
+            is EventsTrackingService.ObserveTrackingAndUpdateActionState -> {
+                trackingState.observe(
+                    this
+                ) {
+                    it?.let {
+                        val isTracking = it.isTracking
+                        updateNotificationTrackingState(isTracking)
+                    }
+
+                }
+            }
+            is EventsTrackingService.ObserveTrackingTime -> {
+                timeRunInSeconds.observe(this) {
+                    it?.let {
+                        changeTrackingTimer(it)
+                    }
+                }
+            }
         }
 
         trackingState.postValue(state)
     }
 
 
+    private fun changeTrackingTimer(time: Long) {
+        val notification = currentNotificationBuilder
+            .setContentText(
+                TimeFormatterUtil.getFormattedStopWatchTime(time * 1000L)
+            )
+        notificationManager.notify(
+            TrackingNotification.notification_id,
+            notification.build()
+        )
+    }
 
     private fun startForegroundService() {
         if (state.isFirsRun) {
-
-            val notificationManager = getSystemService(
-                Context.NOTIFICATION_SERVICE
-            ) as NotificationManager
-
+            
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 trackingNotification.createNotificationChannel(notificationManager)
             }
@@ -275,6 +312,50 @@ class TrackingService : LifecycleService() {
 
     }
 
+    // this only update the pause or resume state
+    private fun updateNotificationTrackingState(isTracking: Boolean) {
+        val notificationActionText = if (isTracking) "Pause" else "Resume"
+
+        val pendingIntent: PendingIntent = if (isTracking) {
+            val pauseIntent = Intent(
+                this,
+                TrackingService::class.java
+            ).apply {
+                action = action_pause_service
+            }
+            PendingIntent.getService(this, 1, pauseIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+        } else {
+            val resumeIntent = Intent(
+                this,
+                TrackingService::class.java
+            ).apply {
+                action = action_start_or_resume_service
+            }
+            PendingIntent.getService(this, 2, resumeIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+        }
+
+        val notificationManager = getSystemService(
+            Context.NOTIFICATION_SERVICE
+        ) as NotificationManager
+
+//         remove previous action buttons
+        currentNotificationBuilder.javaClass.getField("mActions").apply {
+            isAccessible = true
+            set(currentNotificationBuilder, ArrayList<NotificationCompat.Action>())
+        }
+
+        currentNotificationBuilder = currentNotificationBuilder
+            .addAction(
+                R.drawable.ic_pause_black_24dp,
+                notificationActionText,
+                pendingIntent
+            )
+        notificationManager.notify(
+            TrackingNotification.notification_id,
+            currentNotificationBuilder.build()
+        )
+    }
+
 }
 
 
@@ -296,4 +377,6 @@ sealed class EventsTrackingService {
     object EnableLocationTrackingAndTimer : EventsTrackingService()
     data class AddPathPoints(val pathPoints: PolyLineList) : EventsTrackingService()
     data class AddEmptyPolyLine(val pathPoints: PolyLineList) : EventsTrackingService()
+    object ObserveTrackingAndUpdateActionState : EventsTrackingService()
+    object ObserveTrackingTime : EventsTrackingService()
 }
