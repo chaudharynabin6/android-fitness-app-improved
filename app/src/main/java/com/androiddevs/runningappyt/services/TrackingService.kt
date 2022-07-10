@@ -16,6 +16,10 @@ import com.google.android.gms.location.LocationRequest
 import com.google.android.gms.location.LocationResult
 import com.google.android.gms.maps.model.LatLng
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import timber.log.Timber
 import javax.inject.Inject
 import kotlin.properties.Delegates
@@ -35,6 +39,8 @@ class TrackingService : LifecycleService() {
         const val location_update_interval = 5000L
         const val location_fastest_interval = 2000L
 
+        //         timer
+        const val timer_update_interval = 200L
         val stateLiveData = TrackingStateAsLiveData()
     }
 
@@ -42,6 +48,8 @@ class TrackingService : LifecycleService() {
         val isFirstRun = MutableLiveData(true)
         val isTracking = MutableLiveData(false)
         val pathPoints = MutableLiveData<PolyLineList>(mutableListOf(mutableListOf()))
+        val timeRunInMillis = MutableLiveData(0L)
+        val timeRunInSeconds = MutableLiveData(0L)
     }
 
     class TrackingState {
@@ -53,6 +61,12 @@ class TrackingService : LifecycleService() {
         }
         var pathPoints: PolyLineList by Delegates.observable(mutableListOf(mutableListOf())) { _, _, newValue ->
             stateLiveData.pathPoints.postValue(newValue)
+        }
+        var timeRunInMillis: Long by Delegates.observable(0L) { _, _, newValue ->
+            stateLiveData.timeRunInMillis.postValue(newValue)
+        }
+        var timeRunInSeconds: Long by Delegates.observable(0L) { _, _, newValue ->
+            stateLiveData.timeRunInSeconds.postValue(newValue)
         }
     }
 
@@ -72,7 +86,7 @@ class TrackingService : LifecycleService() {
                 }
                 action_pause_service -> {
                     Timber.e("service  paused")
-                    eventPauseTrackingService()
+                    eventPauseTrackingServiceAndTimer()
 
                 }
                 action_stop_service -> {
@@ -96,11 +110,14 @@ class TrackingService : LifecycleService() {
         state.isFirstRun = true
         state.isTracking = false
         state.pathPoints = mutableListOf(mutableListOf())
+        state.timeRunInMillis = 0L
+        state.timeRunInSeconds = 0L
     }
 
     private fun eventStartTrackingService() {
         startForegroundService()
-
+        eventEnableLocationTracking()
+        eventStartTimer()
         state.isFirstRun = false
     }
 
@@ -117,8 +134,12 @@ class TrackingService : LifecycleService() {
         state.pathPoints = p
     }
 
-    private fun eventPauseTrackingService() {
+    private fun eventPauseTrackingServiceAndTimer() {
         state.isTracking = false
+    }
+
+    private fun eventStartTimer() {
+        startTimer()
     }
 
     private fun startForegroundService() {
@@ -140,7 +161,7 @@ class TrackingService : LifecycleService() {
         } else {
             addEmptyPolyline()
         }
-        eventEnableLocationTracking()
+
     }
 
 
@@ -209,5 +230,38 @@ class TrackingService : LifecycleService() {
 
             eventAddEmptyPathPoint(this)
         }
+    }
+
+    //     this state are local state
+    private var lapTime = 0L
+    private var timeRun = 0L
+    private var timeStarted = 0L
+    private var lastSecondTimeStamp = 0L
+    private fun startTimer() {
+        timeStarted = System.currentTimeMillis()
+        CoroutineScope(Dispatchers.Main).launch {
+            while (state.isTracking) {
+//              time difference between the each start time and system time
+                lapTime = System.currentTimeMillis() - timeStarted
+
+//                 post the new lapTime
+//                total run is
+
+                state.timeRunInMillis = (timeRun + lapTime)
+
+
+                if (state.timeRunInMillis >= lastSecondTimeStamp + 1000L) {
+
+                    state.timeRunInSeconds = (state.timeRunInSeconds + 1)
+                    lastSecondTimeStamp += 1000L
+
+                }
+                delay(timer_update_interval)
+            }
+//             updating total time only when
+            timeRun += lapTime
+
+        }
+
     }
 }

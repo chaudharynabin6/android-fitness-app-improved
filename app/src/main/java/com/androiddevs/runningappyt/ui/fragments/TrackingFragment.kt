@@ -10,6 +10,7 @@ import com.androiddevs.runningappyt.R
 import com.androiddevs.runningappyt.databinding.FragmentTrackingBinding
 import com.androiddevs.runningappyt.observers.MapViewObserver
 import com.androiddevs.runningappyt.services.TrackingService
+import com.androiddevs.runningappyt.utils.TimeFormatterUtil
 
 class TrackingFragment : Fragment(R.layout.fragment_tracking) {
 
@@ -53,6 +54,7 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
 
 
         eventSubscribeTracking()
+        eventSubscribeTimerAndUpdateTimeInMillis()
         super.onViewCreated(view, savedInstanceState)
     }
 
@@ -69,6 +71,20 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
             it?.let {
                 state.isTracking = it
                 updateTracking()
+            }
+        }
+    }
+
+    private fun eventSubscribeTimerAndUpdateTimeInMillis() {
+        binding.apply {
+            TrackingService.stateLiveData.timeRunInMillis.observe(viewLifecycleOwner) {
+                it?.let { timeRunInMillis ->
+                    val formattedTime = TimeFormatterUtil.getFormattedStopWatchTime(
+                        ms = timeRunInMillis,
+                        isMillisIncluded = true
+                    )
+                    tvTimer.text = formattedTime
+                }
             }
         }
     }
@@ -97,4 +113,5 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
             }
         }
     }
+
 }
