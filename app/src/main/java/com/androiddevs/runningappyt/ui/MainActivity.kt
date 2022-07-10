@@ -1,16 +1,19 @@
 package com.androiddevs.runningappyt.ui
 
 import android.Manifest
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.View
 import androidx.appcompat.app.AppCompatActivity
+import androidx.navigation.NavController
 import androidx.navigation.Navigation
 import androidx.navigation.ui.setupWithNavController
 import com.androiddevs.runningappyt.R
 import com.androiddevs.runningappyt.databinding.ActivityMainBinding
 import com.androiddevs.runningappyt.permission.location.Constants
 import com.androiddevs.runningappyt.permission.location.LocationPermission
+import com.androiddevs.runningappyt.ui.fragments.TrackingFragmentDirections
 import dagger.hilt.android.AndroidEntryPoint
 import pub.devrel.easypermissions.AppSettingsDialog
 import pub.devrel.easypermissions.EasyPermissions
@@ -18,21 +21,25 @@ import pub.devrel.easypermissions.EasyPermissions
 @AndroidEntryPoint
 class MainActivity : AppCompatActivity(), EasyPermissions.PermissionCallbacks {
 
+    companion object {
+        const val action_show_tracking_fragment = "action_show_tracking_fragment"
+
+    }
+
     private lateinit var binding: ActivityMainBinding
+
+    private lateinit var navController: NavController
+
     override fun onCreate(savedInstanceState: Bundle?) {
 
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-//        val toolbar = findViewById<MaterialToolbar>(R.id.toolbar)
-//
-//        val bottomNavigationView = findViewById<BottomNavigationView>(R.id.bottomNavigationView)
-
         binding.apply {
 
             setSupportActionBar(toolbar)
-            val navController =
+            navController =
                 Navigation.findNavController(this@MainActivity, R.id.navHostFragment)
             bottomNavigationView.setupWithNavController(navController = navController)
 
@@ -45,16 +52,36 @@ class MainActivity : AppCompatActivity(), EasyPermissions.PermissionCallbacks {
                     }
                 }
         }
-        sendEvent(MainActivityEvents.RequestLocationPermission)
+        eventRequestPermission()
+        eventNavigateToTrackingFragmentWhenNeeded(intent = intent)
     }
 
-    private fun sendEvent(events: MainActivityEvents){
-        when(events){
-            MainActivityEvents.RequestLocationPermission -> {
-                requestPermission()
+
+    private fun eventRequestPermission() {
+        requestPermission()
+    }
+
+    private fun eventNavigateToTrackingFragmentWhenNeeded(intent: Intent?) {
+        navigateToTrackingFragmentIfNeeded(intent)
+    }
+
+    private fun navigateToTrackingFragmentIfNeeded(intent: Intent?) {
+
+        intent?.let {
+            if (
+                it.action == action_show_tracking_fragment
+            ) {
+                val action = TrackingFragmentDirections.actionGlobalTrackingFragment()
+                navController.navigate(action)
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        navigateToTrackingFragmentIfNeeded(intent)
+    }
+
     private fun requestPermission() {
         if (LocationPermission.hasLocationPermission(this)) {
             return
@@ -80,7 +107,7 @@ class MainActivity : AppCompatActivity(), EasyPermissions.PermissionCallbacks {
     }
 
     override fun onPermissionsGranted(requestCode: Int, perms: MutableList<String>) {
-//        no operation
+//       ** no operation **
     }
 
     override fun onPermissionsDenied(requestCode: Int, perms: MutableList<String>) {
@@ -103,7 +130,3 @@ class MainActivity : AppCompatActivity(), EasyPermissions.PermissionCallbacks {
     }
 }
 
-
-internal sealed class MainActivityEvents(){
-    object RequestLocationPermission : MainActivityEvents()
-}
