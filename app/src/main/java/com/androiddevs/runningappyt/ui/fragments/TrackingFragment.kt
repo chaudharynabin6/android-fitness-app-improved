@@ -15,11 +15,16 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
 
     private lateinit var binding: FragmentTrackingBinding
 
+    class TrackingFragmentState {
+        var isTracking: Boolean = false
+    }
+
+    private val state = TrackingFragmentState()
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-
     }
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -29,7 +34,7 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
 
         binding.apply {
             btnToggleRun.setOnClickListener {
-                sendCommandToTrackingService(TrackingService.action_start_resume_service)
+                toggleRun()
             }
 
         }
@@ -45,14 +50,51 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
         )
 
         viewLifecycleOwner.lifecycle.addObserver(mapViewObserver)
+
+
+        eventSubscribeTracking()
         super.onViewCreated(view, savedInstanceState)
     }
 
-    private fun sendCommandToTrackingService(action : String){
-        Intent(requireContext(),TrackingService::class.java).also {
+    private fun sendCommandToTrackingService(action: String) {
+        Intent(requireContext(), TrackingService::class.java).also {
             it.action = action
 //            sending intent to the service
             requireContext().startService(it)
+        }
+    }
+
+    private fun eventSubscribeTracking() {
+        TrackingService.stateLiveData.isTracking.observe(viewLifecycleOwner) {
+            it?.let {
+                state.isTracking = it
+                updateTracking()
+            }
+        }
+    }
+
+    private fun updateTracking() {
+        state.apply {
+            binding.apply {
+                if (!isTracking) {
+                    btnToggleRun.text = "START"
+                    btnFinishRun.visibility = View.VISIBLE
+                } else {
+                    btnToggleRun.text = "STOP"
+                    btnFinishRun.visibility = View.GONE
+                }
+            }
+        }
+
+    }
+
+    private fun toggleRun() {
+        state.apply {
+            if (isTracking) {
+                sendCommandToTrackingService(TrackingService.action_pause_service)
+            } else {
+                sendCommandToTrackingService(TrackingService.action_start_or_resume_service)
+            }
         }
     }
 }
