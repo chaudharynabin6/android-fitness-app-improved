@@ -7,21 +7,30 @@ import android.view.*
 import androidx.core.view.MenuProvider
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentActivity
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.navigation.fragment.findNavController
 import com.androiddevs.runningappyt.R
 import com.androiddevs.runningappyt.databinding.FragmentTrackingBinding
 import com.androiddevs.runningappyt.observers.MapViewObserver
 import com.androiddevs.runningappyt.services.TrackingService
+import com.androiddevs.runningappyt.ui.viewmodels.MainViewModel
 import com.androiddevs.runningappyt.utils.TimeFormatterUtil
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class TrackingFragment : Fragment(R.layout.fragment_tracking) {
 
     private lateinit var binding: FragmentTrackingBinding
 
     private lateinit var activityRef: FragmentActivity
     private var menu: Menu? = null
+
+
+    private val viewModel: MainViewModel by viewModels()
+
+    private lateinit var mapViewObserver: MapViewObserver
 
     class TrackingFragmentState {
         var isTracking: Boolean = false
@@ -47,6 +56,11 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
                 toggleRun()
             }
 
+            btnFinishRun.setOnClickListener{
+                mapViewObserver.eventZoomToSeeWholeTrack()
+                mapViewObserver.eventEndRunAndSaveToDb()
+                stopRun()
+            }
         }
 
         activityRef.addMenuProvider(object : MenuProvider {
@@ -87,10 +101,12 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
 
-        val mapViewObserver = MapViewObserver(
+       mapViewObserver = MapViewObserver(
             lifecycle,
             binding.mapView,
-            savedInstanceState
+            savedInstanceState,
+            viewModel = viewModel,
+            activity = activityRef
         )
 
         viewLifecycleOwner.lifecycle.addObserver(mapViewObserver)
