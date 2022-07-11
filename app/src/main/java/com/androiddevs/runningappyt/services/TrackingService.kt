@@ -72,6 +72,7 @@ class TrackingService : LifecycleService() {
         var timeRunInSeconds: Long by Delegates.observable(0L) { _, _, newValue ->
             stateLiveData.timeRunInSeconds.postValue(newValue)
         }
+        var isServiceKilled: Boolean = false
     }
 
     @Inject
@@ -98,7 +99,7 @@ class TrackingService : LifecycleService() {
                 }
                 action_stop_service -> {
                     Timber.e("service stopped")
-
+                    eventKillService()
                 }
             }
 
@@ -115,6 +116,7 @@ class TrackingService : LifecycleService() {
             Context.NOTIFICATION_SERVICE
         ) as NotificationManager
         eventPostInitialValues()
+        Timber.e("service on create called ")
     }
 
     private fun eventPostInitialValues() {
@@ -123,6 +125,7 @@ class TrackingService : LifecycleService() {
         state.pathPoints = mutableListOf(mutableListOf())
         state.timeRunInMillis = 0L
         state.timeRunInSeconds = 0L
+        state.isFirstRun = false
     }
 
     private fun eventStartTrackingService() {
@@ -131,7 +134,7 @@ class TrackingService : LifecycleService() {
         eventStartTimer()
         eventUpdateTimerOnNotification()
         eventUpdateTrackingStateOnNotification()
-        state.isFirstRun = false
+        state.isServiceKilled = false
     }
 
     private fun eventAddPathPoints(p: PolyLineList) {
@@ -156,12 +159,14 @@ class TrackingService : LifecycleService() {
     }
 
     private fun eventUpdateTimerOnNotification() {
-        CoroutineScope(Dispatchers.Main).launch {
-            while (state.isTracking) {
-                changeTrackingTimer(state.timeRunInSeconds)
-                delay(1000L)
+        stateLiveData.timeRunInSeconds.observe(this) {
+            it?.let {
+
+                changeTrackingTimer(it)
+
             }
         }
+
     }
 
     private fun eventUpdateTrackingStateOnNotification() {
@@ -170,6 +175,12 @@ class TrackingService : LifecycleService() {
                 updateNotificationTrackingState(it)
             }
         }
+    }
+
+    private fun eventKillService() {
+        state.isServiceKilled = true
+        killService()
+        eventPostInitialValues()
     }
 
     private fun startForegroundService() {
@@ -292,52 +303,66 @@ class TrackingService : LifecycleService() {
 
     // this only update the pause or resume state
     private fun updateNotificationTrackingState(isTracking: Boolean) {
-        val notificationActionText = if (isTracking) "Pause" else "Resume"
+        if (!state.isServiceKilled) {
 
-        val pendingIntent: PendingIntent = if (isTracking) {
-            val pauseIntent = Intent(
-                this,
-                TrackingService::class.java
-            ).apply {
-                action = action_pause_service
+            val notificationActionText = if (isTracking) "Pause" else "Resume"
+
+            val pendingIntent: PendingIntent = if (isTracking) {
+                val pauseIntent = Intent(
+                    this,
+                    TrackingService::class.java
+                ).apply {
+                    action = action_pause_service
+                }
+                PendingIntent.getService(this, 1, pauseIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+            } else {
+                val resumeIntent = Intent(
+                    this,
+                    TrackingService::class.java
+                ).apply {
+                    action = action_start_or_resume_service
+                }
+                PendingIntent.getService(this, 2, resumeIntent, PendingIntent.FLAG_UPDATE_CURRENT)
             }
-            PendingIntent.getService(this, 1, pauseIntent, PendingIntent.FLAG_UPDATE_CURRENT)
-        } else {
-            val resumeIntent = Intent(
-                this,
-                TrackingService::class.java
-            ).apply {
-                action = action_start_or_resume_service
-            }
-            PendingIntent.getService(this, 2, resumeIntent, PendingIntent.FLAG_UPDATE_CURRENT)
-        }
 
 //         remove previous action buttons
-        currentNotificationBuilder.javaClass.getField("mActions").apply {
-            isAccessible = true
-            set(currentNotificationBuilder, ArrayList<NotificationCompat.Action>())
-        }
+            currentNotificationBuilder.javaClass.getField("mActions").apply {
+                isAccessible = true
+                set(currentNotificationBuilder, ArrayList<NotificationCompat.Action>())
+            }
 
-        currentNotificationBuilder = currentNotificationBuilder
-            .addAction(
-                R.drawable.ic_pause_black_24dp,
-                notificationActionText,
-                pendingIntent
+            currentNotificationBuilder = currentNotificationBuilder
+                .addAction(
+                    R.drawable.ic_pause_black_24dp,
+                    notificationActionText,
+                    pendingIntent
+                )
+            notificationManager.notify(
+                TrackingNotification.notification_id,
+                currentNotificationBuilder.build()
             )
-        notificationManager.notify(
-            TrackingNotification.notification_id,
-            currentNotificationBuilder.build()
-        )
+        }
     }
 
     private fun changeTrackingTimer(time: Long) {
-        val notificationBuilder = currentNotificationBuilder
-            .setContentText(
-                TimeFormatterUtil.getFormattedStopWatchTime(time * 1000L)
+        if (!state.isServiceKilled && state.isTracking) {
+
+            currentNotificationBuilder = currentNotificationBuilder
+                .setContentText(
+                    TimeFormatterUtil.getFormattedStopWatchTime(time * 1000L)
+                )
+            notificationManager.notify(
+                TrackingNotification.notification_id,
+                currentNotificationBuilder.build()
             )
-        notificationManager.notify(
-            TrackingNotification.notification_id,
-            notificationBuilder.build()
-        )
+        }
+
+
+    }
+
+    private fun killService() {
+        notificationManager.cancel(TrackingNotification.notification_id)
+        stopForeground(true)
+        stopSelf()
     }
 }
