@@ -18,6 +18,10 @@ import com.androiddevs.runningappyt.ui.viewmodels.MainViewModel
 import com.androiddevs.runningappyt.utils.TimeFormatterUtil
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class TrackingFragment : Fragment(R.layout.fragment_tracking) {
@@ -57,9 +61,12 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
             }
 
             btnFinishRun.setOnClickListener{
-                mapViewObserver.eventZoomToSeeWholeTrack()
-                mapViewObserver.eventEndRunAndSaveToDb()
-                stopRun()
+                CoroutineScope(Dispatchers.Main).launch {
+                    mapViewObserver.eventZoomToSeeWholeTrack()
+                    mapViewObserver.eventEndRunAndSaveToDb()
+                    delay(1000)
+                    stopRun()
+                }
             }
         }
 
@@ -69,7 +76,8 @@ class TrackingFragment : Fragment(R.layout.fragment_tracking) {
                 TrackingService.stateLiveData.timeRunInMillis.observe(viewLifecycleOwner) { time ->
                     time?.let {
                         if (it > 0L) {
-                            menu.getItem(0)?.isVisible = true
+                            this@TrackingFragment.menu?.findItem(R.id.miCancelTracking)?.isVisible =
+                                true
                         }
                     }
                 }
