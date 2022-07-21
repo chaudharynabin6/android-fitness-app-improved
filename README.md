@@ -2,5 +2,7 @@
 
 # DEMO
 
-[demo1](https://user-images.githubusercontent.com/58876071/180218746-526a0459-7d15-4ef2-9a9b-1f32fb8d9bc3.webm)
-[demo2](https://user-images.githubusercontent.com/58876071/180218752-50b2ee08-6a78-4557-b3bd-ac06ce63404e.webm)
+[demo1.webm](https://user-images.githubusercontent.com/58876071/180219930-a084f419-0d4a-4f73-84ed-81a5f2bd84da.webm)
+
+
+[demo2.webm](https://user-images.githubusercontent.com/58876071/180220063-25b04c56-e1ca-4487-9832-a5782d3395a6.webm)
